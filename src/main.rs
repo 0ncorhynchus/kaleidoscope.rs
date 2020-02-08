@@ -2,11 +2,12 @@ mod lexer;
 mod parser;
 
 use crate::lexer::Lexer;
+use crate::parser::Parser;
 use std::io::{self, Write};
 
 fn main() -> io::Result<()> {
     loop {
-        print!("lexer> ");
+        print!("parser> ");
         io::stdout().flush()?;
 
         let mut buffer = String::new();
@@ -21,12 +22,21 @@ fn main() -> io::Result<()> {
 
         let lexer = Lexer::new(buffer.chars());
         let tokens = lexer.collect::<Result<Vec<_>, _>>();
-        match tokens {
-            Ok(tokens) => {
-                println!("{:?}", tokens);
+        let tokens = match tokens {
+            Ok(tokens) => tokens,
+            Err(err) => {
+                eprintln!("\x1b[1;31merror\x1b[m: {:?}", err);
+                continue;
+            }
+        };
+
+        let mut parser = Parser::new(tokens.into_iter());
+        match parser.parse() {
+            Ok(ast) => {
+                println!("{:?}", ast);
             }
             Err(err) => {
-                println!("Error: {:?}", err);
+                eprintln!("\x1b[1;31merror\x1b[m: {}", err);
             }
         }
     }

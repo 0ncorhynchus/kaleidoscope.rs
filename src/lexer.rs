@@ -14,7 +14,7 @@ pub enum Token {
     Operator(Operator),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operator {
     LessThan,
     Plus,
