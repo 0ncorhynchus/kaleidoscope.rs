@@ -7,11 +7,25 @@ pub enum Token {
     Extern,
     Identifier(String), // IdentifierStr
     Number(f64),        // NumVal
+    OpenParenthesis,
+    CloseParenthesis,
+    SemiColon,
+    Comma,
+    Operator(Operator),
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operator {
+    LessThan,
+    Plus,
+    Minus,
+    Times
+}
+
 #[derive(Debug, PartialEq)]
 pub enum LexerError {
     InvalidNumber(ParseFloatError),
-    UnknownInitial(char),
+    UnknownChar(char),
 }
 
 impl From<ParseFloatError> for LexerError {
@@ -69,17 +83,27 @@ where
                 return Ok(Token::Number(num.parse()?));
             }
 
-            if c == '#' {
-                self.skip_chars(|c| c != &'\n' && c != &'\r');
+            match c {
+                '#' => {
+                    self.skip_chars(|c| c != &'\n' && c != &'\r');
 
-                if self.last_char.is_some() {
-                    return self.get_token();
-                } else {
-                    return Ok(Token::EOF);
+                    if self.last_char.is_some() {
+                        self.get_token()
+                    } else {
+                        Ok(Token::EOF)
+                    }
                 }
+                '(' => Ok(Token::OpenParenthesis),
+                ')' => Ok(Token::CloseParenthesis),
+                ';' => Ok(Token::SemiColon),
+                ',' => Ok(Token::Comma),
+                '<' => Ok(Token::Operator(Operator::LessThan)),
+                '+' => Ok(Token::Operator(Operator::Plus)),
+                '-' => Ok(Token::Operator(Operator::Minus)),
+                '*' => Ok(Token::Operator(Operator::Times)),
+                _ => Err(LexerError::UnknownChar(c))
             }
 
-            Err(LexerError::UnknownInitial(c))
         } else {
             Ok(Token::EOF)
         }
