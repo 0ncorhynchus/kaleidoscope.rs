@@ -19,7 +19,7 @@ pub enum Operator {
     LessThan,
     Plus,
     Minus,
-    Times
+    Times,
 }
 
 #[derive(Debug, PartialEq)]
@@ -101,9 +101,8 @@ where
                 '+' => Ok(Token::Operator(Operator::Plus)),
                 '-' => Ok(Token::Operator(Operator::Minus)),
                 '*' => Ok(Token::Operator(Operator::Times)),
-                _ => Err(LexerError::UnknownChar(c))
+                _ => Err(LexerError::UnknownChar(c)),
             }
-
         } else {
             Ok(Token::EOF)
         }

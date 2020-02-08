@@ -25,7 +25,7 @@ fn main() -> io::Result<()> {
                 println!("{:?}", tokens);
             }
             Err(err) => {
-                    println!("Error: {:?}", err);
+                println!("Error: {:?}", err);
             }
         }
     }
