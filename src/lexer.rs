@@ -110,3 +110,19 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lexer() {
+        let input = "3.141592 def fib x";
+        let mut lexer = Lexer::new(input.chars());
+        assert_eq!(lexer.get_token(), Ok(Token::Number(3.141592)));
+        assert_eq!(lexer.get_token(), Ok(Token::Def));
+        assert_eq!(lexer.get_token(), Ok(Token::Identifier("fib".to_string())));
+        assert_eq!(lexer.get_token(), Ok(Token::Identifier("x".to_string())));
+        assert_eq!(lexer.get_token(), Ok(Token::EOF));
+    }
+}
