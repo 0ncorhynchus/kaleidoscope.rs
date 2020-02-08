@@ -1,16 +1,15 @@
 use std::num::ParseFloatError;
 
 #[derive(Clone, Debug, PartialEq)]
-enum Token {
+pub enum Token {
     EOF,
     Def,
     Extern,
     Identifier(String), // IdentifierStr
     Number(f64),        // NumVal
 }
-
 #[derive(Debug, PartialEq)]
-enum LexerError {
+pub enum LexerError {
     InvalidNumber(ParseFloatError),
     UnknownInitial(char),
 }
@@ -21,7 +20,7 @@ impl From<ParseFloatError> for LexerError {
     }
 }
 
-struct Lexer<I> {
+pub struct Lexer<I> {
     iter: I,
     last_char: Option<char>,
 }
@@ -30,7 +29,7 @@ impl<I> Lexer<I>
 where
     I: Iterator<Item = char>,
 {
-    fn new(iter: I) -> Self {
+    pub fn new(iter: I) -> Self {
         let mut iter = iter;
         let last_char = iter.next();
         Self { iter, last_char }
@@ -105,6 +104,26 @@ where
             self.consume_char();
         }
         chars
+    }
+}
+
+impl<I> Iterator for Lexer<I>
+where
+    I: Iterator<Item = char>,
+{
+    type Item = Result<Token, LexerError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.get_token() {
+            Ok(token) => {
+                if token == Token::EOF {
+                    None
+                } else {
+                    Some(Ok(token))
+                }
+            }
+            Err(err) => Some(Err(err)),
+        }
     }
 }
 
