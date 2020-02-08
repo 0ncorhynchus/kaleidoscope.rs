@@ -36,25 +36,26 @@ where
         Self { iter, last_char }
     }
 
+    fn consume_char(&mut self) {
+        self.last_char = self.iter.next();
+    }
+
     fn get_char(&mut self) -> Option<char> {
         let c = self.last_char;
-        self.last_char = self.iter.next();
+        self.consume_char();
         c
     }
 
     fn get_token(&mut self) -> Result<Token, LexerError> {
-        self.skip_whitespaces();
+        if let Some(c) = self.last_char {
+            if c.is_ascii_whitespace() {
+                self.skip_chars(char::is_ascii_whitespace);
+            }
+        }
 
         if let Some(c) = self.get_char() {
             if c.is_ascii_alphabetic() {
-                let mut ident = c.to_string();
-                while let Some(c) = self.last_char {
-                    if !c.is_ascii_alphanumeric() {
-                        break;
-                    }
-                    ident.push(c);
-                    self.get_char();
-                }
+                let ident = self.get_chars(c, char::is_ascii_alphanumeric);
 
                 return Ok(match ident.as_str() {
                     "def" => Token::Def,
@@ -64,27 +65,19 @@ where
             }
 
             if c.is_ascii_digit() || c == '.' {
-                let mut num = c.to_string();
-                while let Some(c) = self.last_char {
-                    if !c.is_ascii_digit() && c != '.' {
-                        break;
-                    }
-                    num.push(c);
-                    self.get_char();
-                }
+                let num = self.get_chars(c, |c| c.is_ascii_digit() || c == &'.');
 
                 return Ok(Token::Number(num.parse()?));
             }
 
             if c == '#' {
-                while let Some(c) = self.last_char {
-                    if c == '\n' || c == '\r' {
-                        return self.get_token();
-                    }
-                    self.get_char();
-                }
+                self.skip_chars(|c| c != &'\n' && c != &'\r');
 
-                return Ok(Token::EOF);
+                if self.last_char.is_some() {
+                    return self.get_token();
+                } else {
+                    return Ok(Token::EOF);
+                }
             }
 
             Err(LexerError::UnknownInitial(c))
@@ -93,21 +86,25 @@ where
         }
     }
 
-    fn skip_whitespaces(&mut self) {
-        if let Some(c) = self.last_char {
-            if !c.is_ascii_whitespace() {
+    fn skip_chars<P: Fn(&char) -> bool>(&mut self, predicate: P) {
+        while let Some(c) = self.last_char {
+            if !predicate(&c) {
                 return;
             }
-        } else {
-            return;
+            self.consume_char();
         }
+    }
 
+    fn get_chars<P: Fn(&char) -> bool>(&mut self, initial: char, predicate: P) -> String {
+        let mut chars = initial.to_string();
         while let Some(c) = self.last_char {
-            if !c.is_ascii_whitespace() {
+            if !predicate(&c) {
                 break;
             }
-            self.get_char();
+            chars.push(c);
+            self.consume_char();
         }
+        chars
     }
 }
 
