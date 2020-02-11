@@ -5,7 +5,6 @@ mod parser;
 use crate::ir::*;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-use llvm_sys::core::*;
 use std::io::{self, Write};
 
 fn main() -> io::Result<()> {
@@ -47,9 +46,7 @@ fn main() -> io::Result<()> {
 
         match generator.gen(&ast) {
             Ok(ir) => {
-                unsafe {
-                    LLVMDumpValue(ir);
-                }
+                ir.dump();
                 println!();
             }
             Err(err) => {
