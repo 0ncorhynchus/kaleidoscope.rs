@@ -12,7 +12,7 @@ jobs:
       run: |
         sudo add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main'
         sudo apt-get update
-        sudo apt-get install llvm-dev
+        sudo apt-get install -y llvm-9 llvm-9-dev llvm-9-runtime
         llvm-config --version
         llvm-config --link-static --libnames
     - uses: actions/checkout@v2
