@@ -21,6 +21,7 @@ fn main() -> io::Result<()> {
             continue;
         }
         if buffer.trim() == "quit" {
+            generator.dump_module();
             break;
         }
 

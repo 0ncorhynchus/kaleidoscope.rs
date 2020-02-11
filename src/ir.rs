@@ -276,4 +276,10 @@ impl IRGenerator {
         }
         Ok(f)
     }
+
+    pub fn dump_module(&self) {
+        unsafe {
+            LLVMDumpModule(self.module.inner);
+        }
+    }
 }
