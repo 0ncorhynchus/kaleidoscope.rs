@@ -20,10 +20,6 @@ pub enum LLVMError {
 
 type Result<T> = std::result::Result<T, LLVMError>;
 
-pub struct LLVMContext {
-    inner: LLVMContextRef,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct LLVMValue {
     ptr: LLVMValueRef,
@@ -88,6 +84,10 @@ impl LLVMFunction {
     }
 }
 
+pub struct LLVMContext {
+    inner: LLVMContextRef,
+}
+
 impl LLVMContext {
     pub fn new() -> Self {
         Self {
@@ -105,6 +105,10 @@ impl LLVMContext {
     pub fn create_basic_block(&mut self, f: &LLVMFunction) -> LLVMBasicBlockRef {
         let name = CStr::from_bytes_with_nul(b"entry\0").unwrap();
         unsafe { LLVMAppendBasicBlockInContext(self.inner, f.ptr, name.as_ptr()) }
+    }
+
+    pub fn get_double_type(&mut self) -> LLVMTypeRef {
+        unsafe { LLVMDoubleTypeInContext(self.inner) }
     }
 }
 
@@ -140,12 +144,14 @@ impl LLVMModule {
 
 pub struct LLVMBuilder {
     inner: LLVMBuilderRef,
+    ty: LLVMTypeRef,
 }
 
 impl LLVMBuilder {
     pub fn new(context: &mut LLVMContext) -> Self {
         Self {
             inner: unsafe { LLVMCreateBuilderInContext(context.inner) },
+            ty: context.get_double_type(),
         }
     }
 
@@ -178,7 +184,7 @@ impl LLVMBuilder {
                 name.as_ptr(),
             );
             let name = CStr::from_bytes_with_nul(b"booltmp\0").unwrap();
-            LLVMBuildUIToFP(self.inner, l, LLVMDoubleType(), name.as_ptr())
+            LLVMBuildUIToFP(self.inner, l, self.ty, name.as_ptr())
         };
         LLVMValue::new(ptr)
     }
@@ -242,7 +248,7 @@ impl IRGenerator {
     pub fn gen(&mut self, ast: &ExprAST) -> Result<LLVMValue> {
         match ast {
             ExprAST::Number(value) => {
-                let value = unsafe { LLVMConstReal(LLVMDoubleType(), *value) };
+                let value = unsafe { LLVMConstReal(self.context.get_double_type(), *value) };
                 Ok(LLVMValue::new(value))
             }
             ExprAST::Variable(name) => match self.named_values.get(name) {
@@ -303,11 +309,11 @@ impl IRGenerator {
     }
 
     pub fn gen_proto(&mut self, proto: &Prototype) -> Result<LLVMFunction> {
-        let mut doubles = vec![unsafe { LLVMDoubleType() }; proto.args.len()];
+        let mut doubles = vec![self.context.get_double_type(); proto.args.len()];
         let num_args = doubles.len();
         let f_type = unsafe {
             LLVMFunctionType(
-                LLVMDoubleType(),
+                self.context.get_double_type(),
                 doubles.as_mut_ptr(),
                 num_args as c_uint,
                 false as LLVMBool,
