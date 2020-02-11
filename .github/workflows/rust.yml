@@ -13,8 +13,6 @@ jobs:
         sudo add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main'
         sudo apt-get update
         sudo apt-get install -y llvm-9 llvm-9-dev llvm-9-runtime
-        llvm-config-9 --version
-        llvm-config-9 --link-static --libnames
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
