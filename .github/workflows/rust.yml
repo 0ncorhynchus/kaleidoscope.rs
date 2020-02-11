@@ -12,7 +12,8 @@ jobs:
       run: |
         sudo sh -c 'echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list'
         sudo sh -c 'echo "deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main" >> /etc/apt/sources.list'
-        sudo apt install llvm-dev
+        sudo apt install llvm llvm-dev
+        llvm-config --link-static --libnames
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
