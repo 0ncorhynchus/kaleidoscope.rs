@@ -23,8 +23,8 @@ pub enum ExprAST {
 
 #[derive(Debug, PartialEq)]
 pub struct Prototype {
-    name: String,
-    args: Vec<String>,
+    pub name: String,
+    pub args: Vec<String>,
 }
 
 type ParserError = &'static str;
@@ -57,7 +57,14 @@ where
                 self.iter.next();
                 self.parse_extern()?
             }
-            Some(_) => self.parse_expression()?,
+            Some(_) => {
+                let proto = Prototype {
+                    name: "__anon_expr".to_string(),
+                    args: Vec::new(),
+                };
+                let body = Box::new(self.parse_expression()?);
+                ExprAST::Function { proto, body }
+            }
             None => {
                 return Err("Unimplemented");
             }

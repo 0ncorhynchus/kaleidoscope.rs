@@ -1,11 +1,14 @@
+mod ir;
 mod lexer;
 mod parser;
 
+use crate::ir::*;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use std::io::{self, Write};
 
 fn main() -> io::Result<()> {
+    let mut generator = IRGenerator::new();
     loop {
         print!("parser> ");
         io::stdout().flush()?;
@@ -17,6 +20,7 @@ fn main() -> io::Result<()> {
             continue;
         }
         if buffer.trim() == "quit" {
+            generator.dump_module();
             break;
         }
 
@@ -31,12 +35,22 @@ fn main() -> io::Result<()> {
         };
 
         let mut parser = Parser::new(tokens.into_iter());
-        match parser.parse() {
-            Ok(ast) => {
-                println!("{:?}", ast);
-            }
+        let ast = match parser.parse() {
+            Ok(ast) => ast,
             Err(err) => {
                 eprintln!("\x1b[1;31merror\x1b[m: {}", err);
+                continue;
+            }
+        };
+        // println!("{:?}", ast);
+
+        match generator.gen(&ast) {
+            Ok(ir) => {
+                ir.dump();
+                println!();
+            }
+            Err(err) => {
+                eprintln!("\x1b[1;31merror\x1b[m: {:?}", err);
             }
         }
     }
