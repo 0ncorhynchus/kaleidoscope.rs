@@ -213,8 +213,8 @@ impl IRGenerator {
                 self.builder.set_insert_point(bb);
 
                 self.named_values.clear();
-                let num_args = unsafe { LLVMCountParams(f) };
-                let mut args = Vec::with_capacity(num_args as usize);
+                let num_args = unsafe { LLVMCountParams(f) } as usize;
+                let mut args = vec![std::ptr::null_mut(); num_args];
                 unsafe {
                     LLVMGetParams(f, args.as_mut_ptr());
                 }
