@@ -34,9 +34,56 @@ impl LLVMValue {
         Self { ptr }
     }
 
+    pub fn name(&self) -> String {
+        let mut _len: size_t = 0;
+        let name = unsafe { CStr::from_ptr(LLVMGetValueName2(self.ptr, &mut _len as *mut size_t)) };
+        name.to_str().unwrap().to_string()
+    }
+
     pub fn dump(&self) {
         unsafe {
             LLVMDumpValue(self.ptr);
+        }
+    }
+}
+
+impl From<LLVMFunction> for LLVMValue {
+    fn from(f: LLVMFunction) -> Self {
+        Self { ptr: f.ptr }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct LLVMFunction {
+    ptr: LLVMValueRef,
+}
+
+impl LLVMFunction {
+    fn new(ptr: LLVMValueRef) -> Self {
+        Self { ptr }
+    }
+
+    pub fn num_args(&self) -> usize {
+        (unsafe { LLVMCountParams(self.ptr) }) as usize
+    }
+
+    pub fn args(&self) -> Vec<LLVMValue> {
+        let mut args = vec![std::ptr::null_mut(); self.num_args()];
+        unsafe {
+            LLVMGetParams(self.ptr, args.as_mut_ptr());
+        }
+        args.iter().map(|ptr| LLVMValue::new(*ptr)).collect()
+    }
+
+    pub fn verify(&self, action: LLVMVerifierFailureAction) {
+        unsafe {
+            LLVMVerifyFunction(self.ptr, action);
+        }
+    }
+
+    pub fn delete(&self) {
+        unsafe {
+            LLVMDeleteFunction(self.ptr);
         }
     }
 }
@@ -55,7 +102,7 @@ impl LLVMContext {
         }
     }
 
-    pub fn create_basic_block(&mut self, f: &LLVMValue) -> LLVMBasicBlockRef {
+    pub fn create_basic_block(&mut self, f: &LLVMFunction) -> LLVMBasicBlockRef {
         let name = CStr::from_bytes_with_nul(b"entry\0").unwrap();
         unsafe { LLVMAppendBasicBlockInContext(self.inner, f.ptr, name.as_ptr()) }
     }
@@ -74,20 +121,20 @@ pub struct LLVMModule {
 }
 
 impl LLVMModule {
-    pub fn get_function(&mut self, name: &str) -> Result<LLVMValue> {
+    pub fn get_function(&mut self, name: &str) -> Result<LLVMFunction> {
         let c_name = CString::new(name).unwrap();
         let f = unsafe { LLVMGetNamedFunction(self.inner, c_name.as_ptr()) };
         if f.is_null() {
             Err(LLVMError::FunctionNotFound(name.to_string()))
         } else {
-            Ok(LLVMValue::new(f))
+            Ok(LLVMFunction::new(f))
         }
     }
 
-    pub fn add_function(&mut self, name: &str, ty: LLVMTypeRef) -> LLVMValue {
+    pub fn add_function(&mut self, name: &str, ty: LLVMTypeRef) -> LLVMFunction {
         let name = CString::new(name).unwrap();
         let ptr = unsafe { LLVMAddFunction(self.inner, name.as_ptr(), ty) };
-        LLVMValue::new(ptr)
+        LLVMFunction::new(ptr)
     }
 }
 
@@ -136,7 +183,7 @@ impl LLVMBuilder {
         LLVMValue::new(ptr)
     }
 
-    pub fn create_call(&mut self, callee: &LLVMValue, args: Vec<LLVMValue>) -> LLVMValue {
+    pub fn create_call(&mut self, callee: &LLVMFunction, args: Vec<LLVMValue>) -> LLVMValue {
         let mut args: Vec<_> = args.into_iter().map(|v| v.ptr).collect();
         let num_args = args.len();
         let name = CStr::from_bytes_with_nul(b"calltmp\0").unwrap();
@@ -198,16 +245,10 @@ impl IRGenerator {
                 let value = unsafe { LLVMConstReal(LLVMDoubleType(), *value) };
                 Ok(LLVMValue::new(value))
             }
-            ExprAST::Variable(name) => {
-                match self.named_values.get(name) {
-                    Some(value) => {
-                        Ok(LLVMValue::new(value.ptr))
-                    }
-                    None => {
-                        Err(LLVMError::VariableNotFound(name.clone()))
-                    }
-                }
-            }
+            ExprAST::Variable(name) => match self.named_values.get(name) {
+                Some(value) => Ok(LLVMValue::new(value.ptr)),
+                None => Err(LLVMError::VariableNotFound(name.clone())),
+            },
             ExprAST::BinaryOp { op, lhs, rhs } => {
                 let lhs = self.gen(lhs)?;
                 let rhs = self.gen(rhs)?;
@@ -221,7 +262,7 @@ impl IRGenerator {
             ExprAST::Call { callee, args } => {
                 let callee_name = callee.clone();
                 let callee = self.module.get_function(&callee)?;
-                let num_args = unsafe { LLVMCountParams(callee.ptr) } as usize;
+                let num_args = callee.num_args();
                 if num_args != args.len() {
                     return Err(LLVMError::InvalidArgumentsSize(callee_name, args.len()));
                 }
@@ -231,7 +272,7 @@ impl IRGenerator {
                 }
                 Ok(self.builder.create_call(&callee, values))
             }
-            ExprAST::Prototype(proto) => self.gen_proto(proto),
+            ExprAST::Prototype(proto) => Ok(self.gen_proto(proto)?.into()),
             ExprAST::Function { proto, body } => {
                 let f = match self.module.get_function(&proto.name) {
                     Ok(f) => f,
@@ -242,37 +283,18 @@ impl IRGenerator {
                 self.builder.set_insert_point(bb);
 
                 self.named_values.clear();
-                let num_args = unsafe { LLVMCountParams(f.ptr) } as usize;
-                let mut args = vec![std::ptr::null_mut(); num_args];
-                unsafe {
-                    LLVMGetParams(f.ptr, args.as_mut_ptr());
-                }
-                for arg in args {
-                    let mut _length: size_t = 0;
-                    let name = unsafe {
-                        let name = LLVMGetValueName2(arg, &mut _length as *mut size_t);
-                        CStr::from_ptr(name)
-                    };
-                    let arg = LLVMValue::new(arg);
-                    self.named_values
-                        .insert(name.to_str().unwrap().to_string(), arg);
+                for arg in f.args() {
+                    self.named_values.insert(arg.name(), arg);
                 }
 
                 match self.gen(body) {
                     Ok(body) => {
                         self.builder.create_ret(&body);
-                        unsafe {
-                            LLVMVerifyFunction(
-                                f.ptr,
-                                LLVMVerifierFailureAction::LLVMPrintMessageAction,
-                            );
-                        }
-                        Ok(f)
+                        f.verify(LLVMVerifierFailureAction::LLVMPrintMessageAction);
+                        Ok(f.into())
                     }
                     Err(err) => {
-                        unsafe {
-                            LLVMDeleteFunction(f.ptr);
-                        }
+                        f.delete();
                         Err(err)
                     }
                 }
@@ -280,7 +302,7 @@ impl IRGenerator {
         }
     }
 
-    pub fn gen_proto(&mut self, proto: &Prototype) -> Result<LLVMValue> {
+    pub fn gen_proto(&mut self, proto: &Prototype) -> Result<LLVMFunction> {
         let mut doubles = vec![unsafe { LLVMDoubleType() }; proto.args.len()];
         let num_args = doubles.len();
         let f_type = unsafe {
@@ -293,15 +315,11 @@ impl IRGenerator {
         };
 
         let f = self.module.add_function(&proto.name, f_type);
-        let mut params = vec![std::ptr::null_mut(); num_args];
-        unsafe {
-            LLVMGetParams(f.ptr, params.as_mut_ptr());
-        }
-        for (arg, name) in params.iter().zip(proto.args.iter()) {
+        for (arg, name) in f.args().iter().zip(proto.args.iter()) {
             let name = CString::new(name.as_str()).unwrap();
             let len = name.as_bytes().len();
             unsafe {
-                LLVMSetValueName2(*arg, name.as_ptr(), len);
+                LLVMSetValueName2(arg.ptr, name.as_ptr(), len);
             }
         }
         Ok(f)
