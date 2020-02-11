@@ -8,6 +8,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install LLVM9
+      run: |
+        sudo add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-9 main'
+        sudo apt-get update
+        sudo apt-get install -y llvm-9 llvm-9-dev llvm-9-runtime
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
