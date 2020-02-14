@@ -43,20 +43,20 @@ impl LLVMValue {
     }
 }
 
-impl From<LLVMFunction> for LLVMValue {
-    fn from(f: LLVMFunction) -> Self {
+impl From<FunctionRef> for LLVMValue {
+    fn from(f: FunctionRef) -> Self {
         Self { ptr: f.ptr }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct LLVMFunction {
+pub struct FunctionRef {
     ptr: LLVMValueRef,
 }
 
-impl LLVMFunction {
+impl FunctionRef {
     fn new(ptr: LLVMValueRef) -> Self {
-        Self { ptr }
+        FunctionRef { ptr }
     }
 
     pub fn num_args(&self) -> usize {
@@ -102,7 +102,7 @@ impl LLVMContext {
         }
     }
 
-    pub fn create_basic_block(&mut self, f: &LLVMFunction) -> LLVMBasicBlockRef {
+    pub fn create_basic_block(&mut self, f: &FunctionRef) -> LLVMBasicBlockRef {
         let name = CStr::from_bytes_with_nul(b"entry\0").unwrap();
         unsafe { LLVMAppendBasicBlockInContext(self.inner, f.ptr, name.as_ptr()) }
     }
@@ -125,20 +125,20 @@ pub struct LLVMModule {
 }
 
 impl LLVMModule {
-    pub fn get_function(&mut self, name: &str) -> Result<LLVMFunction> {
+    pub fn get_function(&mut self, name: &str) -> Result<FunctionRef> {
         let c_name = CString::new(name).unwrap();
         let f = unsafe { LLVMGetNamedFunction(self.inner, c_name.as_ptr()) };
         if f.is_null() {
             Err(LLVMError::FunctionNotFound(name.to_string()))
         } else {
-            Ok(LLVMFunction::new(f))
+            Ok(FunctionRef::new(f))
         }
     }
 
-    pub fn add_function(&mut self, name: &str, ty: LLVMTypeRef) -> LLVMFunction {
+    pub fn add_function(&mut self, name: &str, ty: LLVMTypeRef) -> FunctionRef {
         let name = CString::new(name).unwrap();
         let ptr = unsafe { LLVMAddFunction(self.inner, name.as_ptr(), ty) };
-        LLVMFunction::new(ptr)
+        FunctionRef::new(ptr)
     }
 }
 
@@ -189,7 +189,7 @@ impl LLVMBuilder {
         LLVMValue::new(ptr)
     }
 
-    pub fn create_call(&mut self, callee: &LLVMFunction, args: Vec<LLVMValue>) -> LLVMValue {
+    pub fn create_call(&mut self, callee: &FunctionRef, args: Vec<LLVMValue>) -> LLVMValue {
         let mut args: Vec<_> = args.into_iter().map(|v| v.ptr).collect();
         let num_args = args.len();
         let name = CStr::from_bytes_with_nul(b"calltmp\0").unwrap();
@@ -308,7 +308,7 @@ impl IRGenerator {
         }
     }
 
-    pub fn gen_proto(&mut self, proto: &Prototype) -> Result<LLVMFunction> {
+    pub fn gen_proto(&mut self, proto: &Prototype) -> Result<FunctionRef> {
         let mut doubles = vec![self.context.get_double_type(); proto.args.len()];
         let num_args = doubles.len();
         let f_type = unsafe {
