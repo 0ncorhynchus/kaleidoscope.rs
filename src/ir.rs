@@ -7,6 +7,7 @@ use std::os::raw::c_uint;
 use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction};
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
+use llvm_sys::transforms::scalar::*;
 
 #[allow(non_camel_case_types)]
 type size_t = usize;
@@ -229,6 +230,7 @@ pub struct IRGenerator {
     context: LLVMContext,
     module: LLVMModule,
     builder: LLVMBuilder,
+    pass_manager: LLVMPassManagerRef,
     named_values: HashMap<String, LLVMValue>,
 }
 
@@ -237,10 +239,20 @@ impl IRGenerator {
         let mut context = LLVMContext::new();
         let module = context.create_module("kaleidoscope");
         let builder = LLVMBuilder::new(&mut context);
+        let pass_manager = unsafe {
+            let pass_manager = LLVMCreateFunctionPassManagerForModule(module.inner);
+            LLVMAddInstructionCombiningPass(pass_manager);
+            LLVMAddReassociatePass(pass_manager);
+            LLVMAddGVNPass(pass_manager);
+            LLVMAddCFGSimplificationPass(pass_manager);
+            LLVMInitializeFunctionPassManager(pass_manager);
+            pass_manager
+        };
         Self {
             context,
             module,
             builder,
+            pass_manager,
             named_values: HashMap::new(),
         }
     }
@@ -297,6 +309,9 @@ impl IRGenerator {
                     Ok(body) => {
                         self.builder.create_ret(&body);
                         f.verify(LLVMVerifierFailureAction::LLVMPrintMessageAction);
+                        unsafe {
+                            LLVMRunFunctionPassManager(self.pass_manager, f.ptr);
+                        }
                         Ok(f.into())
                     }
                     Err(err) => {
