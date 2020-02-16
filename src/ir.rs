@@ -226,28 +226,45 @@ impl Drop for LLVMBuilder {
     }
 }
 
+pub struct PassManager {
+    ptr: LLVMPassManagerRef,
+}
+
+impl PassManager {
+    fn new(module: &mut LLVMModule) -> Self {
+        let ptr = unsafe {
+            let ptr = LLVMCreateFunctionPassManagerForModule(module.inner);
+            LLVMAddInstructionCombiningPass(ptr);
+            LLVMAddReassociatePass(ptr);
+            LLVMAddGVNPass(ptr);
+            LLVMAddCFGSimplificationPass(ptr);
+            LLVMInitializeFunctionPassManager(ptr);
+            ptr
+        };
+        Self { ptr }
+    }
+
+    pub fn run_function_pass(&mut self, f: &mut FunctionRef) {
+        unsafe {
+            LLVMRunFunctionPassManager(self.ptr, f.ptr);
+        }
+    }
+}
+
 pub struct IRGenerator {
     context: LLVMContext,
     module: LLVMModule,
     builder: LLVMBuilder,
-    pass_manager: LLVMPassManagerRef,
+    pass_manager: PassManager,
     named_values: HashMap<String, LLVMValue>,
 }
 
 impl IRGenerator {
     pub fn new() -> Self {
         let mut context = LLVMContext::new();
-        let module = context.create_module("kaleidoscope");
+        let mut module = context.create_module("kaleidoscope");
         let builder = LLVMBuilder::new(&mut context);
-        let pass_manager = unsafe {
-            let pass_manager = LLVMCreateFunctionPassManagerForModule(module.inner);
-            LLVMAddInstructionCombiningPass(pass_manager);
-            LLVMAddReassociatePass(pass_manager);
-            LLVMAddGVNPass(pass_manager);
-            LLVMAddCFGSimplificationPass(pass_manager);
-            LLVMInitializeFunctionPassManager(pass_manager);
-            pass_manager
-        };
+        let pass_manager = PassManager::new(&mut module);
         Self {
             context,
             module,
@@ -292,7 +309,7 @@ impl IRGenerator {
             }
             ExprAST::Prototype(proto) => Ok(self.gen_proto(proto)?.into()),
             ExprAST::Function { proto, body } => {
-                let f = match self.module.get_function(&proto.name) {
+                let mut f = match self.module.get_function(&proto.name) {
                     Ok(f) => f,
                     _ => self.gen_proto(proto)?,
                 };
@@ -309,9 +326,7 @@ impl IRGenerator {
                     Ok(body) => {
                         self.builder.create_ret(&body);
                         f.verify(LLVMVerifierFailureAction::LLVMPrintMessageAction);
-                        unsafe {
-                            LLVMRunFunctionPassManager(self.pass_manager, f.ptr);
-                        }
+                        self.pass_manager.run_function_pass(&mut f);
                         Ok(f.into())
                     }
                     Err(err) => {
